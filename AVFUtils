@@ -1,0 +1,110 @@
+public static class AVFUtils
+	{
+		static SpatialFieldManager sfm;
+		static int schemaId;
+		static ElementId analysisDisplayStyleId;
+		
+		#region Methods
+		// Create AVF Styles
+		static void CreateAVFDisplayStyle(Document doc)
+		{
+			if(analysisDisplayStyleId==null)
+			{
+				using(Transaction t=new Transaction(doc, "Create AVF Style"))
+				{
+					t.Start();
+					AnalysisDisplayColoredSurfaceSettings colouredSurfaceSettings=
+						new AnalysisDisplayColoredSurfaceSettings();
+					
+					colouredSurfaceSettings.ShowGridLines=false;
+					
+					AnalysisDisplayColorSettings colourSettings=
+						new AnalysisDisplayColorSettings();
+					
+					AnalysisDisplayLegendSettings legendSettings=
+						new AnalysisDisplayLegendSettings();
+					
+					legendSettings.ShowLegend=false;
+					
+					AnalysisDisplayStyle analysisDisplayStyle=
+						AnalysisDisplayStyle.CreateAnalysisDisplayStyle(
+							doc, "Paint Face", colouredSurfaceSettings, colourSettings,
+							legendSettings);
+					
+					analysisDisplayStyleId=analysisDisplayStyle.Id;
+					doc.ActiveView.AnalysisDisplayStyleId=analysisDisplayStyleId;
+					
+					t.Commit();
+				}
+			}
+		}
+		static void UpdateViewAVFStyle(View view, string stylename)
+		{
+			Parameter avf=view
+				.get_Parameter(BuiltInParameter.VIEW_ANALYSIS_DISPLAY_STYLE);
+			Document doc=view.Document;
+			if(avf!=null)
+			{
+				ElementId pc=AnalysisDisplayStyle.FindByName(doc, stylename);
+				
+				if(pc.IntegerValue>0)
+					avf.Set(pc);
+			}
+		}
+		
+		// Get Spatial Field Manager
+		static void GetCreateSpatialFieldManager(Document doc)
+		{
+			sfm=SpatialFieldManager.GetSpatialFieldManager(doc.ActiveView);
+			if(sfm==null)
+				sfm=SpatialFieldManager.CreateSpatialFieldManager(doc.ActiveView, 1);
+		}
+		// Analysis Result Schema
+		static void UpdateResultSchema(Document doc)
+		{
+			if(schemaId!=-1)
+			{
+				GetCreateSpatialFieldManager(doc);
+				IList<int> results=sfm.GetRegisteredResults();
+				if(!results.Contains(schemaId))
+					schemaId=-1;
+				
+				if(schemaId==-1)
+				{
+					AnalysisResultSchema resultSchema1=
+						new AnalysisResultSchema("Paint Face", "Paint face of a solid");
+					
+					schemaId=sfm.RegisterResult(resultSchema1);
+				}
+			}
+		}
+		
+		// Create Field Data Points/Values
+		public static void ShowValuesOnFace(Document doc, Face face, IList<UV> points, IList<double> values)
+		{
+			CreateAVFDisplayStyle(doc);
+			UpdateResultSchema(doc);
+			//UpdateViewAVFStyle(doc.ActiveView, "MyStyle");
+			// Populate the FieldDomainPointsByXYZ and values
+			FieldDomainPointsByUV uvs=new FieldDomainPointsByUV(points);
+			IList<ValueAtPoint> fieldValsAtPoint=new List<ValueAtPoint>();
+			
+			foreach(double val in values)
+			{
+				IList<double> valueList=new List<double>();
+				valueList.Add(val);
+				fieldValsAtPoint.Add(new ValueAtPoint(valueList));
+			}
+			
+			FieldValues fieldValues=new FieldValues(fieldValsAtPoint);
+			
+			// Add and update the spatial field primitive
+			int idx=sfm.AddSpatialFieldPrimitive(face, Transform.Identity);
+			sfm.UpdateSpatialFieldPrimitive(idx, uvs, fieldValues, schemaId);
+		}
+		
+		// Update Spatial Field Primitive
+		
+		// Apply Correct Style to View
+		#endregion
+	}
